@@ -1,0 +1,2 @@
+src/app/(dashboard)/scan/page.tsx(27,29): error TS2353: Object literal may only specify known properties, and 'confidence' does not exist in type '(prevState: null) => null'.
+src/components/dashboard/overview/StatsCards.tsx(8,52): error TS2304: Cannot find name 'Sprout'.

@@ -1,36 +1,58 @@
-"""Prometheus-style metrics stubs (activate via ENABLE_PROMETHEUS)."""
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Request, Response
 import time
-import logging
-from typing import Dict
 
-logger = logging.getLogger(__name__)
+# Define metrics
+REQUEST_COUNT = Counter(
+    'http_requests_total',
+    'Total HTTP requests',
+    ['method', 'endpoint', 'status_code']
+)
 
-_counters: Dict[str, int] = {}
-_histograms: Dict[str, list] = {}
+REQUEST_DURATION = Histogram(
+    'http_request_duration_seconds',
+    'HTTP request duration',
+    ['method', 'endpoint'],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+)
 
+ACTIVE_CONNECTIONS = Gauge(
+    'active_connections',
+    'Number of active connections'
+)
 
-def increment(name: str, value: int = 1) -> None:
-    _counters[name] = _counters.get(name, 0) + value
-
-
-def observe(name: str, value: float) -> None:
-    _histograms.setdefault(name, []).append(value)
-
-
-def get_metrics() -> dict:
-    return {"counters": dict(_counters), "histograms": {k: len(v) for k, v in _histograms.items()}}
-
-
-class Timer:
-    """Context manager that records duration to a histogram metric."""
-    def __init__(self, metric_name: str):
-        self.metric_name = metric_name
-        self._start: float = 0
-
-    def __enter__(self):
-        self._start = time.perf_counter()
-        return self
-
-    def __exit__(self, *args):
-        duration = time.perf_counter() - self._start
-        observe(self.metric_name, duration)
+def setup_metrics(app):
+    """Setup metrics collection for FastAPI app"""
+    
+    @app.middleware("http")
+    async def metrics_middleware(request: Request, call_next):
+        start_time = time.time()
+        ACTIVE_CONNECTIONS.inc()
+        
+        try:
+            response = await call_next(request)
+            duration = time.time() - start_time
+            
+            REQUEST_DURATION.labels(
+                method=request.method,
+                endpoint=request.url.path
+            ).observe(duration)
+            
+            REQUEST_COUNT.labels(
+                method=request.method,
+                endpoint=request.url.path,
+                status_code=response.status_code
+            ).inc()
+            
+            return response
+            
+        finally:
+            ACTIVE_CONNECTIONS.dec()
+    
+    @app.get("/metrics")
+    async def metrics():
+        """Prometheus metrics endpoint"""
+        return Response(
+            content=generate_latest(),
+            media_type=CONTENT_TYPE_LATEST
+        )
