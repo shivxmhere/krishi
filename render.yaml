@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: krishi-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: ENVIRONMENT
+        value: production
+      - fromGroup: krishi-secrets
+
+databases:
+  - name: krishi-db
+    plan: free
+    region: ohio
